@@ -4,8 +4,11 @@
 # ============================================================
 
 # Core ML / KGE
-torch==2.2.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2+cpu; sys_platform == "linux"
+torch==2.2.2; sys_platform != "linux"
 pykeen==1.10.1
+class-resolver==0.3.10
 
 # Data handling
 numpy==1.26.4
