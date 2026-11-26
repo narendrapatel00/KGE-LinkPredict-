@@ -121,7 +121,10 @@ KGE-LinkPredict/
     │   └── evaluation.py               # Metric calculation (MRR, MR, Hits@K)
     │
     ├── tests/                          # Automated test suite
-    │   └── __init__.py                 # Test package configuration
+    │   ├── __init__.py                 # Test package configuration
+    │   ├── test_imports.py             # Import and dependency sanity tests
+    │   ├── test_pipeline_helpers.py    # Unit tests for dataset, prediction, and evaluation
+    │   └── test_preprocessing.py       # Unit tests for triple validation and indexing
     │
     ├── data/                           # Local dataset storage (git-ignored)
     ├── models/                         # Serialized model artifacts (git-ignored)
@@ -198,11 +201,10 @@ pytest tests/ -v
 
 | Phase | Milestone | Status | Description |
 |---|---|---|---|
-| **Phase 1** | Project Architecture & Setup | **Completed** | Directory structure, configuration, dependency specification, and placeholder skeletons established. |
-| **Phase 2** | Model Training & Evaluation | **Under Construction** | Implementation of PyKEEN TransE training loop, dataset ingestion, checkpoint management, and Hits@K/MRR evaluation. |
-| **Phase 3** | Interactive Dashboard & Predictions | **Planned** | Full Streamlit UI integration for interactive $(h, r, ?)$ queries, evaluation metrics visualization, and loss curves. |
-
-*Note: In accordance with Phase 1 scope, model training and inference functions currently contain skeleton implementations with full parameter specifications.*
+| **Phase 1** | Project Architecture & Setup | **Completed** | Modular directory layout, central configuration, requirements, and skeleton pipelines. |
+| **Phase 2** | Model Training & Evaluation | **Completed** | Full PyKEEN TransE training pipeline on FB15k-237, checkpoint saving/loading, and Hits@K/MR/MRR metric computation. |
+| **Phase 3** | Interactive Dashboard & Predictions | **Completed** | Rich multi-page Streamlit dashboard (`app.py`) with dataset explorer, model trainer, evaluation charts, and link prediction interface. |
+| **Phase 4** | Testing & Quality Assurance | **Completed** | Comprehensive test suite covering imports, preprocessing validation, and pipeline helpers (`tests/`). |
 
 ---
 

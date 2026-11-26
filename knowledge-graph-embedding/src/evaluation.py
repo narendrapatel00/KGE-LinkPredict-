@@ -5,23 +5,49 @@ Metric computation for the trained TransE model.
 
 Responsibilities
 ----------------
-- Compute standard KGE evaluation metrics on the test split:
+- Extract standard KGE evaluation metrics from a PipelineResult:
     * Mean Rank (MR)
     * Mean Reciprocal Rank (MRR)
     * Hits@1, Hits@3, Hits@10
-- Support both raw and filtered evaluation settings.
 - Persist results to outputs/results/ as JSON.
-
-Notes
------
-Actual implementation is deferred to Phase 2.
+- Load persisted results from disk.
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Ensure project root is on the path so `config` can be imported
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+try:
+    from config import RESULTS_DIR
+except Exception as exc:
+    logger.warning("Could not import config: %s — using fallback path", exc)
+    RESULTS_DIR = Path(__file__).parent.parent / "outputs" / "results"
+
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+_DEFAULT_METRICS_FILE = RESULTS_DIR / "metrics.json"
+
+# Metric keys recognised by PipelineResult.get_metric()
+_METRIC_KEYS = ["hits@1", "hits@3", "hits@10", "mean_rank", "mean_reciprocal_rank"]
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
 
 def evaluate_model(pipeline_result) -> dict:
-    """Evaluate a trained model and return a metrics dictionary.
+    """Extract evaluation metrics from a trained PipelineResult.
 
     Parameters
     ----------
@@ -31,16 +57,24 @@ def evaluate_model(pipeline_result) -> dict:
     Returns
     -------
     dict
-        Dictionary with keys: mean_rank, mean_reciprocal_rank,
-        hits_at_1, hits_at_3, hits_at_10.
-
-    Raises
-    ------
-    NotImplementedError
-        Until Phase 2 implementation is complete.
+        Keys: ``hits@1``, ``hits@3``, ``hits@10``, ``mean_rank``,
+        ``mean_reciprocal_rank``.  Values are floats or ``None`` if a metric
+        could not be retrieved.
     """
-    raise NotImplementedError("Model evaluation will be implemented in Phase 2.")
+    metrics: dict = {}
+    for key in _METRIC_KEYS:
+        try:
+            value = pipeline_result.get_metric(key)
+            metrics[key] = float(value) if value is not None else None
+        except Exception as exc:
+            logger.warning("Could not retrieve metric '%s': %s", key, exc)
+            metrics[key] = None
+    return metrics
 
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
 
 def save_results(metrics: dict, filepath=None) -> None:
     """Persist an evaluation metrics dictionary to a JSON file.
@@ -48,13 +82,43 @@ def save_results(metrics: dict, filepath=None) -> None:
     Parameters
     ----------
     metrics : dict
-        The metrics dictionary returned by :func:evaluate_model.
+        The metrics dictionary returned by :func:`evaluate_model`.
     filepath : str or Path, optional
-        Destination path.  Defaults to outputs/results/metrics.json.
-
-    Raises
-    ------
-    NotImplementedError
-        Until Phase 2 implementation is complete.
+        Destination path.  Defaults to ``outputs/results/metrics.json``.
     """
-    raise NotImplementedError("Result saving will be implemented in Phase 2.")
+    dest = Path(filepath) if filepath else _DEFAULT_METRICS_FILE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = dict(metrics)
+    payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        dest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        logger.info("Evaluation results saved to %s", dest)
+    except Exception as exc:
+        logger.error("save_results failed: %s", exc)
+
+
+def load_results(filepath=None) -> Optional[dict]:
+    """Load previously saved evaluation metrics from a JSON file.
+
+    Parameters
+    ----------
+    filepath : str or Path, optional
+        Source path.  Defaults to ``outputs/results/metrics.json``.
+
+    Returns
+    -------
+    dict or None
+        Parsed metrics dictionary, or ``None`` if the file does not exist
+        or cannot be parsed.
+    """
+    src = Path(filepath) if filepath else _DEFAULT_METRICS_FILE
+    if not src.exists():
+        logger.info("No results file found at %s", src)
+        return None
+    try:
+        return json.loads(src.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("load_results failed: %s", exc)
+        return None

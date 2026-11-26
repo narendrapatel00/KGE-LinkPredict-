@@ -1,205 +1,193 @@
-﻿# KGE-LinkPredict: Knowledge Graph Embedding & Link Prediction System
+﻿# Knowledge Graph Embedding — Link Prediction
 
-A Machine Learning-based Knowledge Graph Embedding (KGE) and Link Prediction system built using the **FB15k-237** benchmark dataset and the **TransE** translation-based embedding algorithm, complete with a modular architecture and an interactive **Streamlit** dashboard.
-
----
-
-## 📌 Table of Contents
-- [Project Overview](#-project-overview)
-- [Objectives](#-objectives)
-- [Technology Stack](#-technology-stack)
-- [Dataset Information](#-dataset-information)
-- [TransE Algorithm Explanation](#-transe-algorithm-explanation)
-- [Project Structure](#-project-structure)
-- [Installation Instructions (Windows)](#-installation-instructions-windows)
-- [How to Run](#-how-to-run)
-- [Current Development Status](#-current-development-status)
-- [License](#-license)
+A Knowledge Graph Embedding (KGE) project that trains a **TransE** model on the **FB15k-237** dataset and exposes an interactive **Streamlit** dashboard for training, evaluation, and link prediction.
 
 ---
 
-## 📖 Project Overview
+## Overview
 
-Knowledge Graphs (KGs) represent real-world facts structured as directed graphs composed of `(head_entity, relation, tail_entity)` or `(h, r, t)` triples. However, real-world knowledge graphs are inherently incomplete.
+Knowledge graphs represent facts as (head, relation, tail) triples. Link prediction asks: given a head entity and a relation, which tail entity completes the triple? This project uses the **TransE** model (Bordes et al., 2013) via **PyKEEN** to learn low-dimensional embeddings and answer such queries.
 
-**KGE-LinkPredict** implements Knowledge Graph Embedding techniques to map symbolic entities and relations into dense, low-dimensional continuous vector spaces. By projecting triples into vector space, the system can:
-- Predict missing links: compute the likelihood of missing facts `(h, r, ?)` or `(?, r, t)`.
-- Discover hidden relationships across structured entities.
-- Provide a CPU-optimized pipeline accessible for academic exploration and rapid prototyping.
-
----
-
-## 🎯 Objectives
-
-1. **Embedding Representation**: Train low-dimensional continuous vector embeddings for entities and relations using the TransE model.
-2. **Benchmark Evaluation**: Leverage the FB15k-237 dataset to benchmark link prediction performance without inverse-relation test leakage.
-3. **Rigorous Metrics**: Measure model performance using standard evaluation metrics:
-   - Mean Rank (MR)
-   - Mean Reciprocal Rank (MRR)
-   - Hits@1, Hits@3, and Hits@10 (both raw and filtered settings)
-4. **Interactive Dashboard**: Build an intuitive Streamlit interface to explore dataset statistics, run link prediction queries interactively, and visualize embeddings.
-5. **Clean Architecture**: Maintain modular code separating configuration, data loading, training, prediction, and testing.
+The Streamlit dashboard provides:
+- **Dataset** page — explore FB15k-237 statistics and sample triples
+- **Training** page — train the model (runs PyKEEN pipeline on CPU)
+- **Evaluation** page — view Hits@K and Mean Reciprocal Rank metrics
+- **Prediction** page — query the trained model for top-K link predictions
 
 ---
 
-## 🛠️ Technology Stack
+## Dataset: FB15k-237
 
-| Layer | Component | Version / Specification |
-|---|---|---|
-| **Core KGE Framework** | [PyKEEN](https://github.com/pykeen/pykeen) | 1.10.1 (TransE pipeline & evaluation) |
-| **Deep Learning** | [PyTorch](https://pytorch.org/) | 2.2.2 (CPU-first execution) |
-| **Data Handling** | NumPy, Pandas, Scikit-Learn | NumPy 1.26.4, Pandas 2.2.2, Scikit-Learn 1.4.2 |
-| **Interactive UI** | [Streamlit](https://streamlit.io/) | 1.35.0 |
-| **Visualization** | Plotly & Matplotlib | Plotly 5.22.0, Matplotlib 3.9.0 |
-| **Testing & QA** | Pytest & pytest-cov | Pytest 8.2.2, pytest-cov 5.0.0 |
-| **Environment** | Python | 3.11 (Windows PowerShell compatible) |
+| Property | Value |
+|---|---|
+| Entities | 14,541 |
+| Relations | 237 |
+| Training triples | ~272,115 |
+| Validation triples | ~17,535 |
+| Test triples | ~20,466 |
+| **Total triples** | **~310,116** |
 
----
-
-## 📊 Dataset Information
-
-This project uses the **FB15k-237** benchmark dataset, a curated subset of Freebase:
-
-- **Entities**: 14,541
-- **Relations**: 237
-- **Total Triples**: 310,116
-  - **Train split**: 272,115 triples
-  - **Validation split**: 17,535 triples
-  - **Test split**: 20,466 triples
-
-### Why FB15k-237 instead of FB15k?
-The original FB15k dataset suffered from test-set leakage caused by inverse relations (e.g., `has_child` vs `child_of`). Models could achieve near-perfect evaluation scores simply by memorizing inverse relation patterns rather than learning semantic representations. Toutanova and Chen (2015) constructed FB15k-237 by removing inverse and redundant relations, making it a robust and realistic benchmark for link prediction.
-
-*Dataset files are fetched and cached dynamically by PyKEEN at runtime.*
+FB15k-237 is a challenging subset of Freebase with inverse relations removed. PyKEEN downloads it automatically on first use.
 
 ---
 
-## 🧠 TransE Algorithm Explanation
+## Project Structure
 
-**TransE** (*Translating Embeddings for Modeling Multi-relational Data*, Bordes et al., NeurIPS 2013) is a foundational energy-based KGE method.
-
-### 1. Geometric Intuition
-TransE models relations as geometric translations in the embedding space $\mathbb{R}^d$. For a valid fact triple $(h, r, t)$:
-$$\mathbf{h} + \mathbf{r} \approx \mathbf{t}$$
-
-The tail entity $\mathbf{t}$ should be located close to the head entity $\mathbf{h}$ translated by the relation vector $\mathbf{r}$.
-
-### 2. Scoring Function
-The plausibility of any triple $(h, r, t)$ is measured by an energy (distance) function:
-$$f(h, r, t) = - \|\mathbf{h} + \mathbf{r} - \mathbf{t}\|_{L_1 \text{ or } L_2}$$
-- Triples with small translation distance receive high scores (close to $0$).
-- Implausible or corrupted triples receive large negative scores.
-
-### 3. Loss Function
-TransE is trained using a margin-based pairwise ranking loss over positive triples $\mathcal{S}$ and corrupted/negative triples $\mathcal{S}'$:
-$$\mathcal{L} = \sum_{(h, r, t) \in \mathcal{S}} \sum_{(h', r, t') \in \mathcal{S}'} \max\left(0, \gamma + f(h', r, t') - f(h, r, t)\right)$$
-where $\gamma > 0$ is a margin hyperparameter separating positive from negative triples. Entity embeddings are constrained to unit length ($\|\mathbf{e}\|_2 = 1$) during training to prevent trivial solutions.
-
----
-
-## 📁 Project Structure
-
-```text
+```
 knowledge-graph-embedding/
-├── app.py                          # Streamlit interactive dashboard entry point
-├── config.py                       # Central hyper-parameters and path definitions
-├── requirements.txt                # Python package dependencies
-├── .gitignore                      # Module-specific ignore rules
-├── README.md                       # Documentation
-│
-├── src/                            # Source code package
+├── app.py                    # Streamlit entry point
+├── config.py                 # Central configuration (paths, hyperparameters)
+├── src/
 │   ├── __init__.py
-│   ├── dataset.py                  # FB15k-237 loading and statistics helpers
-│   ├── preprocessing.py            # Data validation and indexing utilities
-│   ├── training.py                 # TransE training pipeline via PyKEEN
-│   ├── prediction.py               # Link prediction inference engine
-│   └── evaluation.py               # Metric calculation (MRR, MR, Hits@K)
-│
-├── tests/                          # Automated test suite
-│   └── __init__.py                 # Test package configuration
-│
-├── data/                           # Local dataset storage (git-ignored)
-├── models/                         # Serialized model artifacts (git-ignored)
-└── outputs/                        # Runtime outputs
-    ├── checkpoints/                # Model training checkpoints (git-ignored)
-    └── results/                    # Metric summaries and logs (git-ignored)
+│   ├── dataset.py            # Dataset loading and statistics
+│   ├── preprocessing.py      # Triple validation and indexing utilities
+│   ├── training.py           # Model training and checkpoint management
+│   ├── prediction.py         # Link prediction queries
+│   └── evaluation.py         # Metric evaluation and results persistence
+├── pages/
+│   ├── 1_Dataset.py
+│   ├── 2_Training.py
+│   ├── 3_Evaluation.py
+│   └── 4_Prediction.py
+├── tests/
+│   ├── test_imports.py
+│   └── test_preprocessing.py
+├── data/                     # (auto-created) Raw dataset cache
+├── models/                   # (auto-created) Saved model files
+├── outputs/
+│   ├── checkpoints/          # PyKEEN pipeline checkpoint directory
+│   └── results/              # Evaluation metrics (metrics.json)
+└── .venv/                    # Python virtual environment
 ```
 
 ---
 
-## 💻 Installation Instructions (Windows)
+## Technologies
 
-### Prerequisites
-- **Windows 10 / 11**
-- **Python 3.11** (Ensure *"Add python.exe to PATH"* is checked during installation)
-- **Git for Windows**
+| Component | Version |
+|---|---|
+| Python | 3.10 |
+| PyKEEN | 1.10.1 |
+| PyTorch | 2.2.2+cpu |
+| Streamlit | 1.35.0 |
+| NumPy | 1.26.4 |
+| Pandas | 2.2.2 |
+| class_resolver | 0.3.10 (pinned) |
 
-### 1. Clone the Repository
-Open PowerShell and clone the project:
+> **Important:** `class_resolver==0.3.10` is required for PyKEEN 1.10.1 compatibility. It is already pinned in this environment.
+
+---
+
+## Installation (Windows)
+
+The virtual environment is already created. Simply activate it:
+
 ```powershell
-git clone https://github.com/narendrapatel00/KGE-LinkPredict-.git
-cd KGE-LinkPredict\knowledge-graph-embedding
-```
-
-### 2. Create a Virtual Environment
-```powershell
-python -m venv .venv
-```
-
-### 3. Activate the Virtual Environment
-```powershell
+cd knowledge-graph-embedding
 .\.venv\Scripts\Activate.ps1
 ```
-> *Note: If PowerShell displays an execution policy error, enable script execution for your user:*
-> ```powershell
-> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-> ```
 
-### 4. Install Dependencies
+If you need to recreate the environment from scratch:
+
 ```powershell
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install pykeen==1.10.1 streamlit==1.35.0 class_resolver==0.3.10
 ```
+
+> **Note:** `class_resolver==0.3.10` must be installed explicitly — newer versions break PyKEEN 1.10.1 imports.
 
 ---
 
-## 🚀 How to Run
+## Running the Dashboard
 
-> Ensure your virtual environment is activated before running the following commands:
-
-### Run the Streamlit Dashboard
 ```powershell
+# From knowledge-graph-embedding directory, with .venv activated:
 streamlit run app.py
 ```
 
-### Train the TransE Model *(Phase 2 Pipeline)*
-```powershell
-python -m src.training
-```
+The dashboard will open at `http://localhost:8501` in your browser.
 
-### Evaluate Model Performance *(Phase 2 Pipeline)*
-```powershell
-python -m src.evaluation
-```
+---
 
-### Run Automated Tests
+## Training the Model
+
+1. Launch the dashboard (`streamlit run app.py`)
+2. Navigate to the **Training** page
+3. Adjust hyperparameters if desired (defaults: 10 epochs, embedding dim 50)
+4. Click **Train Model**
+
+Training runs the PyKEEN `pipeline` with TransE on FB15k-237. With default settings (10 epochs, CPU), expect **15–30 minutes** depending on hardware.
+
+The trained model is saved to `outputs/checkpoints/` and loaded automatically by the Evaluation and Prediction pages.
+
+Default hyperparameters (`config.py`):
+
+| Parameter | Value |
+|---|---|
+| `NUM_EPOCHS` | 10 |
+| `EMBEDDING_DIM` | 50 |
+| `BATCH_SIZE` | 512 |
+| `LEARNING_RATE` | 0.01 |
+| `DEVICE` | cpu |
+
+---
+
+## Evaluation
+
+After training, go to the **Evaluation** page to compute:
+- **Hits@1**, **Hits@3**, **Hits@10**
+- **Mean Rank (MR)**
+- **Mean Reciprocal Rank (MRR)**
+
+Results are saved to `outputs/results/metrics.json` and displayed as a table and bar chart.
+
+---
+
+## Link Prediction
+
+On the **Prediction** page:
+1. Select a **head entity** and a **relation** from the dropdowns
+2. Click **Predict** to retrieve the top-K predicted tail entities with scores
+
+You can also predict the head entity given a relation and tail.
+
+---
+
+## Running Tests
+
 ```powershell
-pytest tests/ -v
+# Syntax check
+.\.venv\Scripts\python.exe -m py_compile config.py tests/test_imports.py tests/test_preprocessing.py
+
+# Unit tests (no dataset download, no training)
+.\.venv\Scripts\python.exe -m pytest tests/test_imports.py tests/test_preprocessing.py -v
 ```
 
 ---
 
-## 🚦 Current Development Status
+## Limitations
 
-| Phase | Milestone | Status | Description |
-|---|---|---|---|
-| **Phase 1** | Project Architecture & Setup | **Completed** | Directory structure, configuration, dependency specification, and placeholder skeletons established. |
-| **Phase 2** | Model Training & Evaluation | **Under Construction** | Implementation of PyKEEN TransE training loop, dataset ingestion, checkpoint management, and Hits@K/MRR evaluation. |
-| **Phase 3** | Interactive Dashboard & Predictions | **Planned** | Full Streamlit UI integration for interactive $(h, r, ?)$ queries, evaluation metrics visualization, and loss curves. |
-
-*Note: In accordance with Phase 1 scope, model training and inference functions currently contain skeleton implementations with full parameter specifications.*
+- **CPU-only**: Training is significantly slower than GPU. 10 epochs on FB15k-237 takes 15–30 minutes on a typical laptop CPU.
+- **Large dataset**: FB15k-237 (~310K triples) requires a one-time download (~10 MB) on first use.
+- **Memory**: Loading the full dataset and model into memory requires ~1–2 GB RAM.
+- **Single model**: Only TransE is currently implemented.
 
 ---
 
-## 📄 License
-This project is developed for educational and academic research purposes.
+## Future Improvements
+
+- **GPU support**: Add CUDA device selection for faster training
+- **More models**: Add RotatE, ComplEx, DistMult, ConvE via PyKEEN
+- **Hyperparameter search**: Integrate PyKEEN's HPO pipeline
+- **REST API**: Expose prediction endpoints via FastAPI
+- **Batch predictions**: Support CSV upload for bulk link prediction
+- **Explainability**: Add embedding visualization (t-SNE / UMAP)
+
+---
+
+## References
+
+- Bordes, A. et al. (2013). *Translating Embeddings for Modeling Multi-relational Data.* NeurIPS.
+- Ali, M. et al. (2021). *PyKEEN 1.0: A Python Library for Training and Evaluating Knowledge Graph Embeddings.* JMLR.
+- Toutanova, K. & Chen, D. (2015). *Observed versus Latent Features for Knowledge Base and Text Inference.* ACL.
